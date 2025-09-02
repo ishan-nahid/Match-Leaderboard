@@ -1,40 +1,77 @@
-version: "3.9"
+version: '3.9'
 
 services:
+  db:
+    image: postgres:14
+    container_name: spinlog_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 1234  # Change this!
+      POSTGRES_DB: matchdb
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d matchdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
   backend:
     build:
       context: ./Backend
+      dockerfile: Dockerfile
+    container_name: spinlog_backend
+    command: /app/entrypoint.sh
     volumes:
       - ./Backend:/app
+      - static_volume:/app/staticfiles  # For static files persistence
     ports:
       - "8000:8000"
-    env_file:
-      - ./Backend/.env
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    environment:
+      SECRET_KEY: django-insecure-f+6=w-&b-@(^10cld@myn0xkr3^+l8_j3=b^srkc#mpwu@izl3
+      DEBUG: "True"
+      ALLOWED_HOSTS: 127.0.0.1,localhost,backend,frontend
+      DB_NAME: matchdb
+      DB_USER: admin
+      DB_PASSWORD: 1234  # Must match db password
+      DB_HOST: db
+      DB_PORT: 5432
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   frontend:
     build:
       context: ./Frontend
-    volumes:
-      - ./Frontend:/app
+      dockerfile: Dockerfile
+    container_name: spinlog_frontend
     ports:
       - "3000:3000"
-    env_file:
-      - ./Frontend/.env
     depends_on:
       - backend
-
-  db:
-    image: postgres:14
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
     environment:
-      POSTGRES_DB: matchdb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
+      # NEXT_PUBLIC_API_BASE: http://localhost:8000/api  # For browser access
+      # Alternative for internal container communication:
+      NEXT_PUBLIC_API_BASE: http://backend:8000/api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
 volumes:
   postgres_data:
+  static_volume:

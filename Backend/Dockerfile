@@ -1,13 +1,23 @@
-# Backend/Dockerfile
-
 FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    netcat-openbsd \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY ./requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+COPY requirements.txt /app/
+RUN pip install --upgrade pip
+RUN pip install -r requirements.txt
 
-COPY . .
+# Copy project files
+COPY . /app/
 
-# Use gunicorn for production server
-CMD ["gunicorn", "spinlog.wsgi:application", "--bind", "0.0.0.0:8000"]
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
